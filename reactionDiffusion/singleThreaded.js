@@ -13,7 +13,7 @@ const CUSTOM_RATES =  {
                         feed: 0.036,
                         kill: 0.058
                       };
-const SELECTED_RATES = MITOSIS_RATES;
+const SELECTED_RATES = CORAL_RATES;
 
 const FEED = SELECTED_RATES.feed;
 const KILL = SELECTED_RATES.kill;
@@ -29,16 +29,16 @@ var frame = 0;
 function setup() {
   createCanvas(WIDTH, HEIGHT);
   pixelDensity(1);
-  pixelLoading();
+  loadPixels();
+  initAlphaChannel();
   initGrids();
 }
 
-function pixelLoading() {
-  loadPixels();
-  for (var x = 0; x < width; x++){
-    for (var y = 0; y < height; y++){
-      var pixelIndex = (x + y * width)*4;
-      pixels[pixelIndex+3] = 255;
+function initAlphaChannel() {
+  for (var x = 3; x < width*4; x+=4){
+    for (var y = 3; y < height*4; y+=4){
+      var pixelIndex = (x + y * width);
+      pixels[pixelIndex] = 255;
     }
   }
 }
@@ -57,7 +57,7 @@ function initGrids() {
   }
   
   // Sparkle some more B
-  for (var i = 0; i < width * height * 0.015; i++) {
+  for (var i = 0; i < width * height * 0.02; i++) {
     grid[floor(random(width))][floor(random(height))][B] = 1;
   }
 }
@@ -81,8 +81,8 @@ function updateGrids() {
       // --- Draw pixels
       var pixelIndex = (x + y * width) * 4;      
       var luminosity = 
-      //(a > 0.5) ? 10 : 256; // pixelated
-      a * 256;        // smooth
+      (a > 0.5) ? 10 : 256; // pixelated
+      //a * 256;        // smooth
       
       pixels[pixelIndex+0] = luminosity; // R
       pixels[pixelIndex+1] = luminosity; // G
