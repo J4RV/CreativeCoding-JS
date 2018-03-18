@@ -1,19 +1,46 @@
-const WIDTH = 200
-const HEIGHT = 200
+// Idea from https://www.youtube.com/watch?v=BV9ny785UNc
+
+const WIDTH = 512;
+const HEIGHT = 512;
+const FRAMES_TO_CALCULATE = 60 * 30;
 
 const DIFFUSION_RATE_A = 1;
 const DIFFUSION_RATE_B = 0.5;
-const FEED_RATE = 0.055;
-const KILL_RATE = 0.062;
 
-var grid
-var next
+const CORAL_RATES =   { feed: 0.055,  kill: 0.062  };
+const MITOSIS_RATES = { feed: 0.0367, kill: 0.0649 };
+const CUSTOM_RATES =  { 
+                        feed: 0.036,
+                        kill: 0.058
+                      };
+const SELECTED_RATES = MITOSIS_RATES;
+
+const FEED = SELECTED_RATES.feed;
+const KILL = SELECTED_RATES.kill;
+const FEED_PLUS_KILL = FEED + KILL
+
+const A = 0;
+const B = 1;
+
+var grid;
+var next;
+var frame = 0;
 
 function setup() {
   createCanvas(WIDTH, HEIGHT);
   pixelDensity(1);
-  loadPixels();
+  pixelLoading();
   initGrids();
+}
+
+function pixelLoading() {
+  loadPixels();
+  for (var x = 0; x < width; x++){
+    for (var y = 0; y < height; y++){
+      var pixelIndex = (x + y * width)*4;
+      pixels[pixelIndex+3] = 255;
+    }
+  }
 }
 
 function initGrids() {
@@ -24,60 +51,57 @@ function initGrids() {
     grid[x] = [];
     next[x] = [];
     for (var y = 0; y < height; y++){
-      grid[x][y] = {a: 1, b:0};
-      next[x][y] = {a: 0, b:0};
+      grid[x][y] = [1, 0];
+      next[x][y] = [0, 0];
     }
   }
   
-  // Sparkle some B
-  for (var i = 0; i < width * height * 0.02; i++) {
-    grid[floor(random(width))][floor(random(height))].b = 1;
+  // Sparkle some more B
+  for (var i = 0; i < width * height * 0.015; i++) {
+    grid[floor(random(width))][floor(random(height))][B] = 1;
   }
 }
 
 function draw() {
-  drawPixelsFromGrid();
-  calculateNext();
-}
-
-function drawPixelsFromGrid() {
-  for (var x = 0; x < width; x++){
-    for (var y = 0; y < height; y++){
-      var pixelIndex = (x + y * width)*4;
-      var point = grid[x][y];
-      var luminosity = constrain(point.a - point.b, 0, 1)*256;
-      pixels[pixelIndex+0] = luminosity;
-      pixels[pixelIndex+1] = luminosity;
-      pixels[pixelIndex+2] = luminosity;
-      pixels[pixelIndex+3] = 255;
-    }
+  updateGrids();
+  if(frame++ > FRAMES_TO_CALCULATE) {
+    noLoop();
   }
-  updatePixels();
 }
 
-function calculateNext() {
-  for (var x = 0; x < width; x++){
-    for (var y = 0; y < height; y++){
-      var a = grid[x][y].a;
-      var b = grid[x][y].b;
+function updateGrids() {
+  // don't consider corners to prevent null pointers in laplacian
+  // we could detect if a pixel is outside the image and consider its A and B to be zero, but this is faster
+  for (var x = 1; x < width - 1; x++){
+    for (var y = 1; y < height - 1; y++){
+      var a = grid[x][y][A];
+      var b = grid[x][y][B];
       var abb = a * b * b;
       
-      var nextA = a + (DIFFUSION_RATE_A * laplacian(x, y, "a")) -
+      // --- Draw pixels
+      var pixelIndex = (x + y * width) * 4;      
+      var luminosity = 
+      //(a > 0.5) ? 10 : 256; // pixelated
+      a * 256;        // smooth
+      
+      pixels[pixelIndex+0] = luminosity; // R
+      pixels[pixelIndex+1] = luminosity; // G
+      pixels[pixelIndex+2] = luminosity; // B
+      
+      // --- Calculate next state
+      
+      next[x][y][A] = a + (DIFFUSION_RATE_A * laplacian(x, y, A)) -
                       (abb) +
-                      (FEED_RATE * (1 - a));
+                      (FEED * (1 - a));
       
-      var nextB = b + (DIFFUSION_RATE_B * laplacian(x, y, "b")) +
-                      abb -
-                      ((KILL_RATE + FEED_RATE) * b);
+      next[x][y][B] = b + (DIFFUSION_RATE_B * laplacian(x, y, B)) +
+                      (abb) -
+                      (FEED_PLUS_KILL * b);
       
-      nextA = constrain(nextA, 0, 1);
-      nextB = constrain(nextB, 0, 1);
-      
-      next[x][y].a = nextA;
-      next[x][y].b = nextB;
     }
   }
   swapGridAndNext();
+  updatePixels();
 }
 
 function swapGridAndNext() {
@@ -92,25 +116,13 @@ const ADJACENTS_WEIGHT = 0.2;
 const DIAGONALS_WEIGHT = 0.05;
 
 function laplacian(x, y, field) {
-  return grid[x][y][field]           * CENTER_WEIGHT    +
-    safeGetFromGrid(x-1, y  , field) * ADJACENTS_WEIGHT +
-    safeGetFromGrid(x+1, y  , field) * ADJACENTS_WEIGHT +
-    safeGetFromGrid(x  , y-1, field) * ADJACENTS_WEIGHT +
-    safeGetFromGrid(x  , y+1, field) * ADJACENTS_WEIGHT +
-    safeGetFromGrid(x+1, y+1, field) * DIAGONALS_WEIGHT +
-    safeGetFromGrid(x+1, y-1, field) * DIAGONALS_WEIGHT +
-    safeGetFromGrid(x-1, y+1, field) * DIAGONALS_WEIGHT +
-    safeGetFromGrid(x-1, y-1, field) * DIAGONALS_WEIGHT;
-}
-
-function safeGetFromGrid(x, y, field) {
-  var res = 0;
-  var xContent = grid[x];
-  if(xContent){
-    var point = xContent[y];
-    if(point){
-      res = point[field];
-    }
-  }
-  return res;
+  return grid[x-1][y-1][field] * DIAGONALS_WEIGHT +
+         grid[x-1][y  ][field] * ADJACENTS_WEIGHT +
+         grid[x-1][y+1][field] * DIAGONALS_WEIGHT +
+         grid[x  ][y-1][field] * ADJACENTS_WEIGHT +
+         grid[x]  [y]  [field] * CENTER_WEIGHT    +
+         grid[x  ][y+1][field] * ADJACENTS_WEIGHT +
+         grid[x+1][y-1][field] * DIAGONALS_WEIGHT +
+         grid[x+1][y  ][field] * ADJACENTS_WEIGHT +
+         grid[x+1][y+1][field] * DIAGONALS_WEIGHT;
 }
