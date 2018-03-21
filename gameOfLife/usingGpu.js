@@ -1,74 +1,94 @@
 const gpu = new GPU();
 
-// IDK LOL
+var matrix;
 
-var frame = 0;
-var i = 0;
+var WIDTH = 512;
+var HEIGHT = 512;
 
-const WIDTH = 1280;
-const HEIGHT = 720;
-
-gpu.addFunction(function noise(v) {
-  return (
-            sin(v) +
-            sin((v)*2+10.2)*0.5 +
-            sin((v)*4+3.6)*0.25 +
-            sin((v)*8+8.5)*0.125 +
-            sin((v)*16+2.45)/16
-          )*0.5+0.3;          
-});
-
-gpu.addFunction(calcNeighbors);
 
 const initMatrix = gpu.createKernel(function(value) {  
   return value;
-}).setOutput([WIDTH, HEIGHT]);
+})
+.setOutput([HEIGHT, WIDTH]);
 
 const render = gpu.createKernel(function(matrix) {
-  var i = matrix[this.thread.x][this.thread.y];
+  var i = matrix[this.thread.y][this.thread.x];
   this.color(i, i, i, 1);
 })
-.setOutput([WIDTH, HEIGHT])
+.setOutput([HEIGHT, WIDTH])
 .setGraphical(true);
 
 function calcNeighbors(matrix, x, y, width, height) {
-  var up =    (x-1)%width;
-  var down =  (x+1)%width;
-  var left =  (y+1)%height;
-  var right = (x-1)%height;
-  return matrix[up  ][left] + matrix[up  ][y] + matrix[up  ][right] + 
-         matrix[x   ][left] + matrix[x   ][y] + matrix[x   ][right] +
-         matrix[down][left] + matrix[down][y] + matrix[down][right];
+  var up =    (y+1)%height;
+  var down =  (y-1)%height;
+  var right = (x+1)%width;
+  var left =  (x-1)%width;
+  return matrix[left ][up  ] + matrix[left ][y] + matrix[left ][down] + 
+         matrix[x    ][up  ]          +           matrix[x    ][down] +
+         matrix[right][up  ] + matrix[right][y] + matrix[right][down];
 }
+gpu.addFunction(calcNeighbors);
 
 const lifeGame = gpu.createKernel(function(matrix) {
-  var x = this.thread.x;
-  var y = this.thread.y;
+  var x = this.thread.y;
+  var y = this.thread.x;
   var alive = matrix[x][y];
   var neighbors = calcNeighbors(matrix, x, y, width, height);
   return alive * float(neighbors == 2) + float(neighbors == 3);
 })
 .setConstants({
   width: WIDTH,
-  height: HEIGHT,
+  height: HEIGHT
 })
-.setOutput([WIDTH, HEIGHT]);
+.setOutput([HEIGHT, WIDTH])
+.setOutputToTexture(true);
 
 const canvas = render.getCanvas();
 var body;
 function gameOfLifeUpdate() {
-  var matrix = lifeGame(matrix);
+  matrix = lifeGame(matrix);
   render(matrix);
-  body.appendChild(canvas);
+  setTimeout(gameOfLifeUpdate, 16);
 }
 
 $(document).ready(function() {
-  console.log(canvas);
+  matrix = initMatrix(0);
+  render(matrix);
   body = document.getElementsByTagName('body')[0];
-  var matrix = initMatrix(0);
-  console.log(matrix);
+  body.appendChild(canvas);
+  console.log(canvas);
+  
+  /*matrix[0][2] = 1;
+  matrix[1][1] = 1;
   matrix[0][0] = 1;
-  matrix[2][0] = 1;
   matrix[2][2] = 1;
-  setInterval(gameOfLifeUpdate, 18);
+  console.log(matrix);
+  */
+  
+  matrix[10+0][10+0] = 1;
+  matrix[10+0][10+1] = 1;
+  matrix[10+0][10+2] = 1;
+  matrix[10+4][10+2] = 1;
+  matrix[10+1][10+2] = 1;
+  matrix[10+2][10+1] = 1;
+  matrix[10+3][10+1] = 1;
+  matrix[10+4][10+1] = 1;
+  matrix[10+4][10+2] = 1;
+  matrix[10+3][10+3] = 1;
+  var i = 20000;
+  while(i-- > 0){
+	  let x = Math.floor(Math.random() * HEIGHT);
+	  let y = Math.floor(Math.random() * WIDTH);
+	  matrix[x][y] = 1;
+  }
+  console.log(matrix);
+  
+  
+  console.log(calcNeighbors(matrix, 1, 1, WIDTH, HEIGHT));
+  //matrix = lifeGame(matrix);
+  console.log(matrix);
+  console.log(calcNeighbors(matrix, 1, 1, WIDTH, HEIGHT));
+  
+  
+  setTimeout(gameOfLifeUpdate, 16);
 });
